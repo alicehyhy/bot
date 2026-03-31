@@ -203,6 +203,19 @@ async def on_command_error(ctx: commands.Context, error):
 
     await ctx.send(f"❌ Có lỗi xảy ra: {error}")
 
+@bot.event
+async def on_member_join(member):
+    role = discord.utils.get(member.guild.roles, name="Member")
+
+    if role:
+        try:
+            await member.add_roles(role)
+            print(f"Đã gán role cho {member}")
+        except discord.Forbidden:
+            print("Bot không đủ quyền")
+    else:
+        print("Không tìm thấy role")
+
 
 # ===== RUN =====
 if not TOKEN:
