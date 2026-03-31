@@ -63,16 +63,6 @@ async def on_message(message: discord.Message):
 
     user_id = message.author.id
 
-    # chống spam đơn giản
-    spam[user_id] += 1
-    if spam[user_id] > 5:
-        try:
-            await message.delete()
-            await message.channel.send(f"🚫 {message.author.mention} spam quá nhiều!")
-        except discord.Forbidden:
-            pass
-        return
-
     # auto reply
     content = message.content.lower()
     keywords = ["tải game", "link tải", "download", "link", "tải ở đâu"]
