@@ -3,9 +3,8 @@ import discord
 from discord.ext import commands
 
 # ===== CẤU HÌNH =====
-TOKEN = os.getenv("MTQ4ODQwODEwOTk1MjAxMjI4OA.G7vDP5.owFRrkzIj1RR9UT8qp6phABp-GD2MxtdNvonuo")  # ✅ SỬA Ở ĐÂY
-
-WELCOME_CHANNEL_ID = 1488428612087447665  # ID kênh chào mừng
+TOKEN = os.getenv("TOKEN")
+WELCOME_CHANNEL_ID = 1488428612087447665
 
 # ===== INTENTS =====
 intents = discord.Intents.default()
@@ -53,22 +52,19 @@ async def on_message(message):
 
     user = message.author.id
 
-    # chống spam
     spam[user] = spam.get(user, 0) + 1
     if spam[user] > 5:
         await message.delete()
         await message.channel.send(f"🚫 {message.author.mention} spam!")
         return
 
-    # auto reply
     if any(k in message.content.lower() for k in ["link", "tải", "download"]):
         await message.reply("📥 Link ở kênh #download nhé!")
 
-    # level
     levels[user] = levels.get(user, 0) + 1
     if levels[user] % 10 == 0:
         await message.channel.send(
-            f"🎉 {message.author.mention} level {levels[user]//10}"
+            f"🎉 {message.author.mention} level {levels[user] // 10}"
         )
 
     await bot.process_commands(message)
