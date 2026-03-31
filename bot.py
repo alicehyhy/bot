@@ -103,7 +103,7 @@ async def clear(ctx: commands.Context, amount: int):
         return
 
     await ctx.channel.purge(limit=amount + 1)
-    msg = await ctx.send(f"🧹 Đã xóa {amount} tin nhắn.")
+    msg = await ctx.send(f"🧹 Sylvie Đã xóa {amount} tin nhắn.")
     await msg.delete(delay=3)
 
 
