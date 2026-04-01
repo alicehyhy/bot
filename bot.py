@@ -15,6 +15,7 @@ WELCOME_CHANNEL_ID = 1488428612087447665
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.reactions = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -70,48 +71,6 @@ def ensure_daily(player: dict):
         player["daily_done"] = False
         player["daily_target"] = random.choice(["talk", "feed", "rest"])
         player["daily_reward"] = random.randint(2, 5)
-
-
-class GiveawayView(discord.ui.View):
-    def __init__(self, giveaway_id: str):
-        super().__init__(timeout=None)
-        self.giveaway_id = giveaway_id
-
-    @discord.ui.button(
-        label="Tham gia",
-        emoji="🎉",
-        style=discord.ButtonStyle.green,
-        custom_id="join_giveaway"
-    )
-    async def join_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
-        data = giveaways.get(self.giveaway_id)
-
-        if not data:
-            await interaction.response.send_message(
-                "❌ Giveaway này không còn tồn tại.",
-                ephemeral=True
-            )
-            return
-
-        if interaction.user.bot:
-            await interaction.response.send_message(
-                "❌ Bot không thể tham gia giveaway.",
-                ephemeral=True
-            )
-            return
-
-        if interaction.user.id in data["participants"]:
-            await interaction.response.send_message(
-                "⚠️ Bạn đã tham gia giveaway này rồi!",
-                ephemeral=True
-            )
-            return
-
-        data["participants"].add(interaction.user.id)
-        await interaction.response.send_message(
-            "✅ Bạn đã tham gia giveaway thành công!",
-            ephemeral=True
-        )
 
 
 @bot.event
@@ -341,7 +300,7 @@ async def gstart(ctx: commands.Context, minutes: int, winners: int, *, prize: st
             f"**Phần thưởng:** {prize}\n"
             f"**Số người thắng:** {winners}\n"
             f"**Kết thúc sau:** {minutes} phút\n\n"
-            f"Nhấn nút **Tham gia** bên dưới để tham gia!"
+            f"**React 🎉 để tham gia!**"
         ),
         color=discord.Color.gold()
     )
@@ -349,26 +308,32 @@ async def gstart(ctx: commands.Context, minutes: int, winners: int, *, prize: st
     embed.timestamp = end_time
 
     msg = await ctx.send(embed=embed)
-    giveaway_id = str(msg.id)
+    await msg.add_reaction("🎉")
 
+    giveaway_id = str(msg.id)
     giveaways[giveaway_id] = {
         "channel_id": ctx.channel.id,
         "message_id": msg.id,
         "prize": prize,
         "winner_count": winners,
-        "participants": set(),
         "host_id": ctx.author.id
     }
 
-    await msg.edit(view=GiveawayView(giveaway_id))
-
     await asyncio.sleep(minutes * 60)
 
-    data = giveaways.get(giveaway_id)
-    if not data:
+    try:
+        fetched_msg = await ctx.channel.fetch_message(msg.id)
+    except discord.NotFound:
+        giveaways.pop(giveaway_id, None)
         return
 
-    participants = list(data["participants"])
+    reaction = discord.utils.get(fetched_msg.reactions, emoji="🎉")
+    participants = []
+
+    if reaction is not None:
+        async for user in reaction.users():
+            if not user.bot:
+                participants.append(user)
 
     if len(participants) == 0:
         end_embed = discord.Embed(
@@ -376,14 +341,14 @@ async def gstart(ctx: commands.Context, minutes: int, winners: int, *, prize: st
             description=f"**Quà:** {prize}\n\n❌ Không có ai tham gia.",
             color=discord.Color.red()
         )
-        await msg.edit(embed=end_embed, view=None)
+        await fetched_msg.edit(embed=end_embed)
         await ctx.send(f"🎉 Giveaway **{prize}** đã kết thúc, nhưng không có ai tham gia.")
         giveaways.pop(giveaway_id, None)
         return
 
     actual_winners = min(winners, len(participants))
-    winner_ids = random.sample(participants, actual_winners)
-    mentions = ", ".join(f"<@{user_id}>" for user_id in winner_ids)
+    winner_users = random.sample(participants, actual_winners)
+    mentions = ", ".join(user.mention for user in winner_users)
 
     end_embed = discord.Embed(
         title="🎉 GIVEAWAY KẾT THÚC",
@@ -395,7 +360,7 @@ async def gstart(ctx: commands.Context, minutes: int, winners: int, *, prize: st
     )
     end_embed.set_footer(text=f"Tổ chức bởi {ctx.author}")
 
-    await msg.edit(embed=end_embed, view=None)
+    await fetched_msg.edit(embed=end_embed)
     await ctx.send(f"🎊 Chúc mừng {mentions} đã thắng giveaway **{prize}**!")
 
     giveaways.pop(giveaway_id, None)
@@ -411,21 +376,28 @@ async def greroll(ctx: commands.Context, message_id: int):
     except discord.HTTPException:
         pass
 
-    data = giveaways.get(str(message_id))
-
-    if not data:
-        msg = await ctx.send("❌ Không tìm thấy giveaway đang lưu hoặc giveaway đã kết thúc.")
-        await msg.delete(delay=5)
+    try:
+        msg = await ctx.channel.fetch_message(message_id)
+    except discord.NotFound:
+        temp = await ctx.send("❌ Không tìm thấy tin nhắn giveaway.")
+        await temp.delete(delay=5)
         return
 
-    participants = list(data["participants"])
+    reaction = discord.utils.get(msg.reactions, emoji="🎉")
+    participants = []
+
+    if reaction is not None:
+        async for user in reaction.users():
+            if not user.bot:
+                participants.append(user)
+
     if not participants:
-        msg = await ctx.send("❌ Giveaway này không có ai tham gia.")
-        await msg.delete(delay=5)
+        temp = await ctx.send("❌ Giveaway này không có ai tham gia.")
+        await temp.delete(delay=5)
         return
 
-    winner_id = random.choice(participants)
-    await ctx.send(f"🔄 Reroll giveaway **{data['prize']}**: chúc mừng <@{winner_id}>!")
+    winner = random.choice(participants)
+    await ctx.send(f"🔄 Reroll giveaway: chúc mừng {winner.mention}!")
 
 
 @bot.group(invoke_without_command=True)
@@ -678,7 +650,6 @@ async def reset(ctx: commands.Context):
 @commands.has_permissions(administrator=True)
 async def download(ctx: commands.Context, *, args):
     try:
-        # !download tên nút | link nút | tiêu đề | mô tả | link ảnh
         parts = args.split(" | ")
 
         label = parts[0].strip()
@@ -757,25 +728,32 @@ async def on_command_error(ctx: commands.Context, error):
 async def glist(ctx: commands.Context, message_id: int):
     try:
         await ctx.message.delete()
-    except:
+    except discord.Forbidden:
+        pass
+    except discord.HTTPException:
         pass
 
-    data = giveaways.get(str(message_id))
-
-    if not data:
-        msg = await ctx.send("❌ Không tìm thấy giveaway hoặc đã kết thúc.")
-        await msg.delete(delay=5)
+    try:
+        msg = await ctx.channel.fetch_message(message_id)
+    except discord.NotFound:
+        temp = await ctx.send("❌ Không tìm thấy tin nhắn giveaway.")
+        await temp.delete(delay=5)
         return
 
-    participants = list(data["participants"])
+    reaction = discord.utils.get(msg.reactions, emoji="🎉")
+    participants = []
+
+    if reaction is not None:
+        async for user in reaction.users():
+            if not user.bot:
+                participants.append(user)
 
     if not participants:
-        await ctx.send("⚠️ Chưa có ai tham gia giveaway này.")
+        temp = await ctx.send("⚠️ Chưa có ai tham gia giveaway này.")
+        await temp.delete(delay=5)
         return
 
-    mentions = [f"<@{uid}>" for uid in participants]
-
-    # tránh quá dài
+    mentions = [user.mention for user in participants]
     chunk = "\n".join(mentions[:50])
 
     embed = discord.Embed(
