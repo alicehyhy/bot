@@ -1,6 +1,8 @@
 import os
+import json
 import asyncio
 import random
+from pathlib import Path
 from datetime import timedelta
 from collections import defaultdict
 
@@ -19,6 +21,55 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 spam = defaultdict(int)
 levels = defaultdict(int)
 giveaways = {}
+
+TF_SAVE_FILE = Path("tf_data.json")
+tf_players = {}
+
+
+def load_tf_data():
+    global tf_players
+    if TF_SAVE_FILE.exists():
+        try:
+            with open(TF_SAVE_FILE, "r", encoding="utf-8") as f:
+                tf_players = json.load(f)
+        except Exception as e:
+            print(f"❌ Lỗi load tf_data.json: {e}")
+            tf_players = {}
+    else:
+        tf_players = {}
+
+
+def save_tf_data():
+    try:
+        with open(TF_SAVE_FILE, "w", encoding="utf-8") as f:
+            json.dump(tf_players, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"❌ Lỗi save tf_data.json: {e}")
+
+
+def get_player(user_id: int):
+    return tf_players.get(str(user_id))
+
+
+def get_mood_text(affection: int, energy: int):
+    if energy <= 1:
+        return "Mệt"
+    if affection >= 50:
+        return "Rất vui"
+    if affection >= 25:
+        return "Vui"
+    if affection >= 10:
+        return "Bình thường"
+    return "Buồn"
+
+
+def ensure_daily(player: dict):
+    current_day = player["day"]
+    if player.get("daily_day") != current_day:
+        player["daily_day"] = current_day
+        player["daily_done"] = False
+        player["daily_target"] = random.choice(["talk", "feed", "rest"])
+        player["daily_reward"] = random.randint(2, 5)
 
 
 class GiveawayView(discord.ui.View):
@@ -66,12 +117,13 @@ class GiveawayView(discord.ui.View):
 @bot.event
 async def on_ready():
     try:
+        load_tf_data()
         synced = await bot.tree.sync()
         print(f"✅ Bot online: {bot.user}")
         print(f"✅ Đã sync {len(synced)} slash command")
         print(f"✅ ID kênh welcome đang dùng: {WELCOME_CHANNEL_ID}")
+        print("✅ Đã load dữ liệu mini game Teaching Feeling")
 
-        # đăng ký lại view cho button sau khi bot restart
         bot.add_view(GiveawayView("persistent_giveaway_view"))
 
     except Exception as e:
@@ -352,6 +404,252 @@ async def greroll(ctx: commands.Context, message_id: int):
 
     winner_id = random.choice(participants)
     await ctx.send(f"🔄 Reroll giveaway **{data['prize']}**: chúc mừng <@{winner_id}>!")
+
+
+@bot.group(invoke_without_command=True)
+async def tf(ctx: commands.Context):
+    await ctx.send(
+        "📖 Lệnh game: `!tf start`, `!tf status`, `!tf talk`, `!tf feed`, `!tf rest`, `!tf sleep`, `!tf nextday`, `!tf daily`, `!tf reset`"
+    )
+
+
+@tf.command()
+async def start(ctx: commands.Context):
+    user_id = str(ctx.author.id)
+
+    if user_id in tf_players:
+        await ctx.send("⚠️ Bạn đã bắt đầu mini game rồi.")
+        return
+
+    tf_players[user_id] = {
+        "name": str(ctx.author),
+        "day": 1,
+        "affection": 0,
+        "food": 5,
+        "energy": 5,
+        "mood": "Buồn",
+        "daily_day": 1,
+        "daily_done": False,
+        "daily_target": random.choice(["talk", "feed", "rest"]),
+        "daily_reward": 3
+    }
+    save_tf_data()
+
+    embed = discord.Embed(
+        title="🌱 Bắt đầu câu chuyện",
+        description=(
+            f"{ctx.author.mention} đã bắt đầu chăm sóc Sylvie.\n"
+            f"Ngày 1 bắt đầu."
+        ),
+        color=discord.Color.purple()
+    )
+    await ctx.send(embed=embed)
+
+
+@tf.command()
+async def status(ctx: commands.Context):
+    player = get_player(ctx.author.id)
+    if not player:
+        await ctx.send("❌ Bạn chưa bắt đầu. Dùng `!tf start`")
+        return
+
+    ensure_daily(player)
+    player["mood"] = get_mood_text(player["affection"], player["energy"])
+    save_tf_data()
+
+    daily_text = "✅ Đã hoàn thành" if player["daily_done"] else f"Chưa xong: `{player['daily_target']}`"
+
+    embed = discord.Embed(
+        title="📊 Trạng thái Sylvie",
+        description="Một ngày yên bình trong căn nhà nhỏ.",
+        color=discord.Color.purple()
+    )
+    embed.add_field(name="🏠 Day", value=player["day"], inline=True)
+    embed.add_field(name="❤️ Affection", value=player["affection"], inline=True)
+    embed.add_field(name="💔 Mood", value=player["mood"], inline=True)
+    embed.add_field(name="🍞 Food", value=player["food"], inline=True)
+    embed.add_field(name="😴 Energy", value=player["energy"], inline=True)
+    embed.add_field(name="🎁 Daily", value=daily_text, inline=False)
+
+    await ctx.send(embed=embed)
+
+
+@tf.command()
+async def daily(ctx: commands.Context):
+    player = get_player(ctx.author.id)
+    if not player:
+        await ctx.send("❌ Bạn chưa bắt đầu. Dùng `!tf start`")
+        return
+
+    ensure_daily(player)
+    save_tf_data()
+
+    target_map = {
+        "talk": "Nói chuyện với Sylvie",
+        "feed": "Cho Sylvie ăn",
+        "rest": "Để Sylvie nghỉ ngơi"
+    }
+
+    status = "✅ Đã hoàn thành" if player["daily_done"] else "⌛ Chưa hoàn thành"
+
+    await ctx.send(
+        f"🎁 Daily ngày {player['day']}:\n"
+        f"• Nhiệm vụ: **{target_map[player['daily_target']]}**\n"
+        f"• Thưởng: **+{player['daily_reward']} affection**\n"
+        f"• Trạng thái: {status}"
+    )
+
+
+@tf.command()
+async def feed(ctx: commands.Context):
+    player = get_player(ctx.author.id)
+    if not player:
+        await ctx.send("❌ Dùng `!tf start` trước.")
+        return
+
+    if player["food"] <= 0:
+        await ctx.send("❌ Hết đồ ăn rồi.")
+        return
+
+    player["food"] -= 1
+    gain = random.randint(1, 3)
+    player["affection"] += gain
+    player["mood"] = get_mood_text(player["affection"], player["energy"])
+
+    text = random.choice([
+        f"🍞 Sylvie nhận bữa ăn nhỏ và khẽ gật đầu. (+{gain} affection)",
+        f"🍲 Sylvie ăn chậm rãi rồi nhìn bạn dịu hơn. (+{gain} affection)",
+        f"🥖 Không khí trở nên ấm áp hơn một chút. (+{gain} affection)"
+    ])
+
+    if not player["daily_done"] and player["daily_target"] == "feed":
+        player["daily_done"] = True
+        player["affection"] += player["daily_reward"]
+        text += f"\n🎁 Hoàn thành daily! (+{player['daily_reward']} affection)"
+
+    save_tf_data()
+    await ctx.send(text)
+
+
+@tf.command()
+async def rest(ctx: commands.Context):
+    player = get_player(ctx.author.id)
+    if not player:
+        await ctx.send("❌ Dùng `!tf start` trước.")
+        return
+
+    gain = random.randint(2, 3)
+    player["energy"] = min(player["energy"] + gain, 10)
+    player["mood"] = get_mood_text(player["affection"], player["energy"])
+
+    text = random.choice([
+        "😴 Sylvie nghỉ ngơi trong yên tĩnh.",
+        "🛏️ Căn phòng lặng đi, chỉ còn nhịp thở đều đều.",
+        "🌙 Một khoảng nghỉ ngắn khiến tâm trạng ổn hơn."
+    ])
+
+    if not player["daily_done"] and player["daily_target"] == "rest":
+        player["daily_done"] = True
+        player["affection"] += player["daily_reward"]
+        text += f"\n🎁 Hoàn thành daily! (+{player['daily_reward']} affection)"
+
+    save_tf_data()
+    await ctx.send(f"{text}\n⚡ Energy +{gain}")
+
+
+@tf.command()
+async def sleep(ctx: commands.Context):
+    player = get_player(ctx.author.id)
+    if not player:
+        await ctx.send("❌ Dùng `!tf start` trước.")
+        return
+
+    player["energy"] = 10
+    player["mood"] = get_mood_text(player["affection"], player["energy"])
+    save_tf_data()
+
+    await ctx.send("🌙 Cả hai kết thúc ngày dài. Năng lượng đã hồi đầy.")
+
+
+@tf.command()
+async def talk(ctx: commands.Context):
+    player = get_player(ctx.author.id)
+    if not player:
+        await ctx.send("❌ Dùng `!tf start` trước.")
+        return
+
+    if player["energy"] <= 0:
+        await ctx.send("❌ Sylvie quá mệt để nói chuyện.")
+        return
+
+    player["energy"] -= 1
+    gain = random.randint(1, 5)
+    player["affection"] += gain
+    player["mood"] = get_mood_text(player["affection"], player["energy"])
+
+    dialogues = [
+        f"💬 Sylvie: \"...Hôm nay yên bình hơn mình nghĩ.\" (+{gain} affection)",
+        f"💬 Sylvie khẽ nhìn bạn rồi nói: \"Cảm ơn vì đã ở đây.\" (+{gain} affection)",
+        f"💬 Sylvie im lặng một lúc rồi mỉm cười rất nhẹ. (+{gain} affection)",
+        f"💬 Sylvie: \"Mình đang dần quen với cuộc sống này.\" (+{gain} affection)"
+    ]
+    text = random.choice(dialogues)
+
+    if player["affection"] >= 10 and player["affection"] < 20:
+        text += "\n📖 Event mở khóa: Sylvie bắt đầu chủ động nói chuyện hơn."
+    elif player["affection"] >= 20 and player["affection"] < 30:
+        text += "\n📖 Event mở khóa: Một buổi trò chuyện dài hơn bình thường."
+    elif player["affection"] >= 50:
+        text += "\n📖 Event đặc biệt: Mối quan hệ đã trở nên rất gần gũi."
+
+    if not player["daily_done"] and player["daily_target"] == "talk":
+        player["daily_done"] = True
+        player["affection"] += player["daily_reward"]
+        text += f"\n🎁 Hoàn thành daily! (+{player['daily_reward']} affection)"
+
+    save_tf_data()
+    await ctx.send(text)
+
+
+@tf.command()
+async def nextday(ctx: commands.Context):
+    player = get_player(ctx.author.id)
+    if not player:
+        await ctx.send("❌ Dùng `!tf start` trước.")
+        return
+
+    player["day"] += 1
+    player["food"] += random.randint(1, 2)
+    player["energy"] = max(player["energy"] - 1, 0)
+    player["mood"] = get_mood_text(player["affection"], player["energy"])
+    ensure_daily(player)
+    save_tf_data()
+
+    event = random.choice([
+        "🏠 Một ngày mới bắt đầu trong im lặng.",
+        "🌤️ Ánh sáng buổi sáng tràn qua khung cửa sổ.",
+        "🍃 Không khí hôm nay có vẻ nhẹ nhàng hơn.",
+        "📖 Một chương mới nhỏ bé lại bắt đầu."
+    ])
+
+    await ctx.send(
+        f"{event}\n"
+        f"➡️ Day **{player['day']}**\n"
+        f"🍞 Nhặt thêm một ít đồ ăn.\n"
+        f"🎁 Daily mới: **{player['daily_target']}**"
+    )
+
+
+@tf.command()
+async def reset(ctx: commands.Context):
+    user_id = str(ctx.author.id)
+    if user_id not in tf_players:
+        await ctx.send("❌ Bạn chưa có dữ liệu để reset.")
+        return
+
+    tf_players.pop(user_id, None)
+    save_tf_data()
+    await ctx.send("🗑️ Đã xóa dữ liệu mini game của bạn.")
 
 
 @bot.tree.command(name="hello", description="Chào người dùng")
