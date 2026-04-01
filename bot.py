@@ -222,6 +222,17 @@ async def on_command_error(ctx: commands.Context, error):
     await ctx.send(f"❌ Có lỗi xảy ra: {error}")
 
 
+@bot.command()
+async def say(ctx: commands.Context, *, message: str):
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ Bạn không có quyền Administrator.")
+        return
+
+    await ctx.message.delete()
+    msg = await ctx.send(message)
+    await msg.delete(delay=5)
+
+
 # ===== RUN =====
 if not TOKEN:
     raise RuntimeError("Thiếu biến môi trường TOKEN")
