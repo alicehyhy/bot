@@ -735,6 +735,19 @@ async def download(ctx, *, args):
     except discord.HTTPException:
         pass
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def say(ctx, *, message=None):
+    await ctx.message.delete()
+
+    embed = discord.Embed(description=message or "")
+
+    if ctx.message.attachments:
+        file = ctx.message.attachments[0]
+        embed.set_image(url=file.url)
+
+    await ctx.send(embed=embed)
+
 
 if not TOKEN:
     raise RuntimeError("Thiếu biến môi trường TOKEN")
