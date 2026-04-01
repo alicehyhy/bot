@@ -677,6 +677,25 @@ async def on_command_error(ctx: commands.Context, error):
     await ctx.send(f"❌ Có lỗi xảy ra: {error}")
 
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def download(ctx, label: str, link: str):
+    embed = discord.Embed(
+        title="📦 Tải file",
+        description="Nhấn nút bên dưới để tải",
+        color=discord.Color.blue()
+    )
+
+    view = discord.ui.View()
+    button = discord.ui.Button(
+        label=label,
+        url=link
+    )
+    view.add_item(button)
+
+    await ctx.send(embed=embed, view=view)
+
+
 if not TOKEN:
     raise RuntimeError("Thiếu biến môi trường TOKEN")
 
