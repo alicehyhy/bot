@@ -223,15 +223,14 @@ async def on_command_error(ctx: commands.Context, error):
 
 
 @bot.command()
+@commands.has_permissions(administrator=True)
 async def say(ctx: commands.Context, *, message: str):
-    if not ctx.author.guild_permissions.administrator:
-        await ctx.send("❌ Bạn không có quyền Administrator.")
-        return
+    try:
+        await ctx.message.delete()  # 🔥 xóa tin nhắn lệnh
+    except:
+        pass  # tránh crash nếu thiếu quyền
 
-    await ctx.message.delete()
-    msg = await ctx.send(message)
-    await msg.delete(delay=5)
-
+    await ctx.send(message)  # gửi tin nhắn
 
 # ===== RUN =====
 if not TOKEN:
