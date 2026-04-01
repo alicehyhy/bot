@@ -123,9 +123,6 @@ async def on_ready():
         print(f"✅ Đã sync {len(synced)} slash command")
         print(f"✅ ID kênh welcome đang dùng: {WELCOME_CHANNEL_ID}")
         print("✅ Đã load dữ liệu mini game Teaching Feeling")
-
-        bot.add_view(GiveawayView("persistent_giveaway_view"))
-
     except Exception as e:
         print(f"❌ Lỗi sync slash command: {e}")
 
@@ -134,6 +131,7 @@ async def on_ready():
 async def on_member_join(member: discord.Member):
     print(f"📥 Thành viên mới vào: {member} ({member.id})")
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
+
     if channel is None:
         try:
             channel = await bot.fetch_channel(WELCOME_CHANNEL_ID)
@@ -182,9 +180,9 @@ async def on_message(message: discord.Message):
         return
 
     user_id = message.author.id
-
     content = message.content.lower()
     keywords = ["tải game", "link tải", "download", "link", "tải ở đâu"]
+
     if any(keyword in content for keyword in keywords):
         await message.reply("📥 Link tải game có tại kênh #download nhé!")
 
@@ -286,13 +284,33 @@ async def ban(ctx: commands.Context, member: discord.Member, *, reason="Không c
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def say(ctx: commands.Context, *, message: str):
+async def say(ctx: commands.Context, *, message: str = ""):
     try:
         await ctx.message.delete()
-    except:
+    except discord.Forbidden:
+        pass
+    except discord.HTTPException:
         pass
 
-    await ctx.send(message)
+    has_attachment = len(ctx.message.attachments) > 0
+
+    if has_attachment:
+        embed = discord.Embed(
+            description=message if message else None,
+            color=discord.Color.blurple()
+        )
+
+        if ctx.guild and ctx.guild.icon:
+            embed.set_thumbnail(url=ctx.guild.icon.url)
+
+        embed.set_image(url=ctx.message.attachments[0].url)
+        await ctx.channel.send(embed=embed)
+        return
+
+    if message.strip():
+        await ctx.channel.send(message)
+    else:
+        await ctx.channel.send("‎")
 
 
 @bot.command()
@@ -300,7 +318,9 @@ async def say(ctx: commands.Context, *, message: str):
 async def gstart(ctx: commands.Context, minutes: int, winners: int, *, prize: str):
     try:
         await ctx.message.delete()
-    except:
+    except discord.Forbidden:
+        pass
+    except discord.HTTPException:
         pass
 
     if minutes <= 0:
@@ -386,7 +406,9 @@ async def gstart(ctx: commands.Context, minutes: int, winners: int, *, prize: st
 async def greroll(ctx: commands.Context, message_id: int):
     try:
         await ctx.message.delete()
-    except:
+    except discord.Forbidden:
+        pass
+    except discord.HTTPException:
         pass
 
     data = giveaways.get(str(message_id))
@@ -652,37 +674,9 @@ async def reset(ctx: commands.Context):
     await ctx.send("🗑️ Đã xóa dữ liệu mini game của bạn.")
 
 
-@bot.tree.command(name="hello", description="Chào người dùng")
-async def hello(interaction: discord.Interaction):
-    await interaction.response.send_message(f"Xin chào {interaction.user.mention} 👋")
-
-
-@bot.event
-async def on_command_error(ctx: commands.Context, error):
-    if isinstance(error, commands.CommandNotFound):
-        return
-
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Bạn không có quyền dùng lệnh này.")
-        return
-
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("❌ Thiếu tham số.")
-        return
-
-    if isinstance(error, commands.BadArgument):
-        await ctx.send("❌ Sai định dạng tham số.")
-        return
-
-    await ctx.send(f"❌ Có lỗi xảy ra: {error}")
-
-
-import discord
-from discord.ext import commands
-
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def download(ctx, *, args):
+async def download(ctx: commands.Context, *, args):
     try:
         # !download tên nút | link nút | tiêu đề | mô tả | link ảnh
         parts = args.split(" | ")
@@ -692,12 +686,11 @@ async def download(ctx, *, args):
         title = parts[2].strip() if len(parts) > 2 else "📦 Tải file"
         description = parts[3].strip() if len(parts) > 3 else "Nhấn nút bên dưới để tải"
         image_url = parts[4].strip() if len(parts) > 4 else None
-
-    except:
+    except Exception:
         msg = await ctx.send(
-            "❌ Dùng lệnh:\n"
-            "`!download Tên nút | link nút | tiêu đề | mô tả | link ảnh`"
+            "❌ Dùng lệnh:\n`!download Tên nút | link nút | tiêu đề | mô tả | link ảnh`"
         )
+        await msg.delete(delay=8)
         return
 
     embed = discord.Embed(
@@ -724,10 +717,8 @@ async def download(ctx, *, args):
         )
     )
 
-    # gửi tin nhắn thường, KHÔNG reply
     await ctx.channel.send(embed=embed, view=view)
 
-    # xóa lệnh gốc
     try:
         await ctx.message.delete()
     except discord.Forbidden:
@@ -735,18 +726,30 @@ async def download(ctx, *, args):
     except discord.HTTPException:
         pass
 
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def say(ctx, *, message=None):
-    await ctx.message.delete()
 
-    embed = discord.Embed(description=message or "")
+@bot.tree.command(name="hello", description="Chào người dùng")
+async def hello(interaction: discord.Interaction):
+    await interaction.response.send_message(f"Xin chào {interaction.user.mention} 👋")
 
-    if ctx.message.attachments:
-        file = ctx.message.attachments[0]
-        embed.set_image(url=file.url)
 
-    await ctx.send(embed=embed)
+@bot.event
+async def on_command_error(ctx: commands.Context, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Bạn không có quyền dùng lệnh này.")
+        return
+
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Thiếu tham số.")
+        return
+
+    if isinstance(error, commands.BadArgument):
+        await ctx.send("❌ Sai định dạng tham số.")
+        return
+
+    await ctx.send(f"❌ Có lỗi xảy ra: {error}")
 
 
 if not TOKEN:
