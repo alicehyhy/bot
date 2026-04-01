@@ -752,6 +752,42 @@ async def on_command_error(ctx: commands.Context, error):
     await ctx.send(f"❌ Có lỗi xảy ra: {error}")
 
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def glist(ctx: commands.Context, message_id: int):
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+    data = giveaways.get(str(message_id))
+
+    if not data:
+        msg = await ctx.send("❌ Không tìm thấy giveaway hoặc đã kết thúc.")
+        await msg.delete(delay=5)
+        return
+
+    participants = list(data["participants"])
+
+    if not participants:
+        await ctx.send("⚠️ Chưa có ai tham gia giveaway này.")
+        return
+
+    mentions = [f"<@{uid}>" for uid in participants]
+
+    # tránh quá dài
+    chunk = "\n".join(mentions[:50])
+
+    embed = discord.Embed(
+        title="🎉 Danh sách tham gia giveaway",
+        description=chunk,
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Tổng: {len(participants)} người")
+
+    await ctx.send(embed=embed)
+
+
 if not TOKEN:
     raise RuntimeError("Thiếu biến môi trường TOKEN")
 
