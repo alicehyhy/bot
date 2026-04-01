@@ -677,21 +677,60 @@ async def on_command_error(ctx: commands.Context, error):
     await ctx.send(f"❌ Có lỗi xảy ra: {error}")
 
 
+import discord
+from discord.ext import commands
+
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def download(ctx, label: str, link: str):
+async def download(ctx, *, args):
+    try:
+        # Cú pháp:
+        # !download tên nút | link nút | tiêu đề | mô tả | link ảnh
+        parts = args.split(" | ")
+
+        label = parts[0].strip()
+        link = parts[1].strip()
+        title = parts[2].strip() if len(parts) > 2 else "📦 Tải file"
+        description = parts[3].strip() if len(parts) > 3 else "Nhấn nút bên dưới để tải"
+        image_url = parts[4].strip() if len(parts) > 4 else None
+
+    except Exception:
+        await ctx.send(
+            "❌ Dùng lệnh:\n"
+            "`!download Tên nút | link nút | tiêu đề | mô tả | link ảnh`"
+        )
+        return
+
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+    except discord.HTTPException:
+        pass
+
     embed = discord.Embed(
-        title="📦 Tải file",
-        description="Nhấn nút bên dưới để tải",
-        color=discord.Color.blue()
+        title=title,
+        description=description,
+        color=discord.Color.blurple()
     )
 
+    embed.set_footer(text=f"Được gửi bởi {ctx.guild.name}" if ctx.guild else "Download")
+    
+    if ctx.guild and ctx.guild.icon:
+        embed.set_thumbnail(url=ctx.guild.icon.url)
+
+    if image_url:
+        embed.set_image(url=image_url)
+
     view = discord.ui.View()
-    button = discord.ui.Button(
-        label=label,
-        url=link
+    view.add_item(
+        discord.ui.Button(
+            label=label,
+            url=link,
+            style=discord.ButtonStyle.link,
+            emoji="⬇️"
+        )
     )
-    view.add_item(button)
 
     await ctx.send(embed=embed, view=view)
 
