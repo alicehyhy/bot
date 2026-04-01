@@ -4,23 +4,19 @@ from collections import defaultdict
 import discord
 from discord.ext import commands
 
-# ===== CẤU HÌNH =====
 TOKEN = os.getenv("TOKEN")
 WELCOME_CHANNEL_ID = 1488428612087447665
 
-# ===== INTENTS =====
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ===== DATA TẠM =====
 spam = defaultdict(int)
 levels = defaultdict(int)
 
 
-# ===== SỰ KIỆN =====
 @bot.event
 async def on_ready():
     try:
@@ -35,11 +31,7 @@ async def on_ready():
 @bot.event
 async def on_member_join(member: discord.Member):
     print(f"📥 Thành viên mới vào: {member} ({member.id})")
-
-    # Lấy kênh chào mừng
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
-
-    # Nếu cache chưa có thì fetch trực tiếp
     if channel is None:
         try:
             channel = await bot.fetch_channel(WELCOME_CHANNEL_ID)
@@ -47,7 +39,7 @@ async def on_member_join(member: discord.Member):
             print(f"❌ Không tìm thấy kênh chào mừng: {e}")
             channel = None
 
-    # Gửi tin nhắn chào mừng
+    
     if channel is not None:
         embed = discord.Embed(
             title="Chào mừng thành viên mới 🎉",
@@ -70,7 +62,6 @@ async def on_member_join(member: discord.Member):
     else:
         print("❌ Channel welcome vẫn là None.")
 
-    # Tự động add role Member
     role = discord.utils.get(member.guild.roles, name="Member")
     if role:
         try:
@@ -91,13 +82,11 @@ async def on_message(message: discord.Message):
 
     user_id = message.author.id
 
-    # auto reply
     content = message.content.lower()
     keywords = ["tải game", "link tải", "download", "link", "tải ở đâu"]
     if any(keyword in content for keyword in keywords):
         await message.reply("📥 Link tải game có tại kênh #download nhé!")
 
-    # level đơn giản
     levels[user_id] += 1
     if levels[user_id] % 10 == 0:
         await message.channel.send(
@@ -107,7 +96,6 @@ async def on_message(message: discord.Message):
     await bot.process_commands(message)
 
 
-# ===== PREFIX COMMANDS =====
 @bot.command()
 async def ping(ctx: commands.Context):
     await ctx.send("Pong! 🏓")
@@ -195,13 +183,11 @@ async def ban(ctx: commands.Context, member: discord.Member, *, reason="Không c
         await ctx.send(f"❌ Lỗi khi ban: {e}")
 
 
-# ===== SLASH COMMAND =====
 @bot.tree.command(name="hello", description="Chào người dùng")
 async def hello(interaction: discord.Interaction):
     await interaction.response.send_message(f"Xin chào {interaction.user.mention} 👋")
 
 
-# ===== ERROR HANDLER =====
 @bot.event
 async def on_command_error(ctx: commands.Context, error):
     if isinstance(error, commands.CommandNotFound):
@@ -232,7 +218,7 @@ async def say(ctx: commands.Context, *, message: str):
 
     await ctx.send(message)  # gửi tin nhắn
 
-# ===== RUN =====
+
 if not TOKEN:
     raise RuntimeError("Thiếu biến môi trường TOKEN")
 
